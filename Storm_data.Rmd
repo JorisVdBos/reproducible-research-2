@@ -10,30 +10,93 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message =  FALSE)
 ```
+# Synopsis
+In this document data is extracted from the American Government, National Oceanic & Atmospheric Administration, National Weather Service. Disastrous events are compared to each other to determine the most harmful ones in relation to public health and economic damages.  
+It is found that tornadoes, excessive heat and thunderstorm have the highest reported injuries and fatalities. Wind chills and rip currents are especially deadly since they have the highest ratio of fatalities to injuries. The highest property damage is caused by tornadoes, flash floods and thunderstorms. To crops, the most damaging events are hail, followed by flash floods and floods.
+
+# Data Processing
 ## Reading the data
-Obtaining data from the internet:
-```{r}
+Obtaining the data from the internet can be done by running this code.
+```{r, cache = TRUE}
 download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2","data.csv.bz2")
-stormData <- read.csv("data.csv.bz2")
 ```
-For reference, documentation can be found following [this url][https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf].
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+For reference, documentation can be found following [this url](https://d396qusza40orc.cloudfront.net/repdata%2Fpeer2_doc%2Fpd01016005curr.pdf).  
+Loading the data into R is done by this simple command. It may take a couple of minutes.
+```{r, cache = TRUE}
+stormData <- read.csv("data.csv.bz2", stringsAsFactors = FALSE)
 ```
 
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
+## Transforming the data
+Using the data.table library, the data frame can be transformed to a data table, as such:
+```{r}
+library(data.table)
+stormData <- as.data.table(stormData)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Results
+## Health
+In this section we will look at which events cause the most fatalities and injuries.  
+To look at the ten most deadly events, first the sum over every event type is extracted from the stormData data table. Then the data is sorted and the first 10 are extracted.
+```{r}
+healthByType <- stormData[,.(fatalities = sum(FATALITIES), 
+                             injuries = sum(INJURIES),
+                             sum = sum(FATALITIES) + sum(INJURIES)), 
+                          by = EVTYPE][order(-sum)]
+healthByType[1:10]
+```
+Tornadoes are the leading cause in casualties, followed by excessive heat and thunderstorms (TSTM WIND).
+
+To construct a plot, the data frame first has to be melted, so fatalities and injuries can be represented next to each other. Then the plot can be constructed.
+```{r}
+library(ggplot2)
+ggplot(data = melt(healthByType[1:10, 1:3, with = FALSE], id.vars = "EVTYPE")) +
+  geom_bar(aes(x = reorder(EVTYPE,value), 
+               value, 
+               fill = variable), 
+           stat='identity', 
+           position="dodge") +
+  coord_flip() +
+  labs(x = "", y = "") +
+  theme(legend.title=element_blank())
+```
+
+The severity of an event can be described with the ratio of fatalities to the total of injured or fatalities reported in the event.
+```{r}
+healthByType[, ratio := fatalities/(fatalities+injuries)]
+healthByType[injuries > 10,][order(-ratio)][1:10]
+```
+Above table shows wind chills and rip currents are especially deadly.
+
+## Economy
+This section will be looking at the economical damage. As with the health information data, the sum over every event type is extracted from the stormData data table. Then the data is sorted and the first 10 are extracted.
+```{r}
+econDmgByType <- stormData[,.(propdmg = sum(PROPDMG), 
+                              cropdmg = sum(CROPDMG),
+                              sumdmg = sum(PROPDMG)+sum(CROPDMG)), 
+                           by = EVTYPE][order(-sumdmg)]
+econDmgByType[1:10]
+```
+From the data, tornadoes are the most damaging to economy, followed by flash floods and thunderstorms (TSTM WIND).
+```{r}
+ggplot(data = melt(econDmgByType[1:10, 1:3, with = FALSE], id.vars = "EVTYPE")) +
+  geom_bar(aes(x = reorder(EVTYPE,value), 
+               value, 
+               fill = variable), 
+           stat='identity', 
+           position="dodge") +
+  coord_flip() +
+  labs(x = "", y = "") +
+  theme(legend.title=element_blank())
+```
+
+The most damaging events to property are found in the next table:
+```{r}
+econDmgByType[order(-propdmg), 1:2, with = FALSE][1:10]
+```
+In line with the overall damagee, it is tornadoes, flash floods and thunderstorms (TSTM WIND).  
+The most damaging events to crops can be found in the next table:
+```{r}
+econDmgByType[order(-cropdmg), c(1,3), with = FALSE][1:10]
+
+```
+Here can be concluded hail to be the leading cause of crop damage, followed by flash floods and floods.
